@@ -175,19 +175,33 @@
 
     window.onload = function() {
         loadChat();
-        setInterval(loadChat, 5000);
     };
 
     function loadChat() {
+        // オフライン時は通信を控える
+        if (!navigator.onLine) {
+            setTimeout(loadChat, 15000); // 15秒後に再確認
+            return;
+        }
+
         const fetchUrl = `${GAS_URL}?action=getChat&t=${new Date().getTime()}`;
 
         fetch(fetchUrl)
             .then(response => response.json())
             .then(data => {
                 renderMessages(data);
-                fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: new URLSearchParams({ type: 'markRead', sender: '部員' }) });
+                
+                // 未読メッセージがある時だけ「既読」の通信を行うように変更
+                const hasUnread = data.some(msg => msg.sender !== '部員' && msg.read === "");
+                if (hasUnread) {
+                    fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: new URLSearchParams({ type: 'markRead', sender: '部員' }) });
+                }
             })
-            .catch(err => { console.error(err); });
+            .catch(err => { console.error("通信エラー:", err); })
+            .finally(() => {
+                // ★ 通信が完了してから15秒後に次を確認する（安全なループ処理）
+                setTimeout(loadChat, 15000);
+            });
     }
 
     function renderMessages(data) {
@@ -249,8 +263,8 @@
         if(msg.time) { const d = new Date(msg.time); timeStr = `${d.getHours()}:${d.getMinutes().toString().padStart(2,'0')}`; }
         
         const isMe = (msg.sender === "部員");
-
-        // ★修正ポイント: msg.message ではなく msg.text として読み取るよう修正
+        
+        // ★文字表示バグ修正版: msg.text を読み取る
         const messageText = msg.text || "";
         const isDeleted = (messageText === "__DELETED__");
         
@@ -259,7 +273,6 @@
         
         const readHtml = (isMe && msg.read === "既読" && !isDeleted) ? `<div class="read-status">既読</div>` : ``;
 
-        // ★修正ポイント: 安全にエスケープ処理を行う
         let displayMsg = escapeHtml(messageText);
         let bubbleClass = "bubble";
         let clickAttr = "";
@@ -302,7 +315,6 @@
         hideBadge();
 
         const now = new Date();
-        // ★修正ポイント: text プロパティとして格納するよう統一
         const tempMsg = { sender: "部員", text: text, time: now.toISOString(), read: "" };
         appendMessageToDom(tempMsg);
         chatMain.scrollTop = chatMain.scrollHeight;
@@ -325,13 +337,8 @@
             formData.append('targetTime', timeStr);
 
             fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: formData })
-            .then(() => {
-                setTimeout(loadChat, 1000); 
-            })
-            .catch(err => {
-                alert("取り消しに失敗しました");
-                console.error(err);
-            });
+            .then(() => { setTimeout(loadChat, 1000); })
+            .catch(err => { alert("取り消しに失敗しました"); console.error(err); });
         }
     }
 
@@ -348,8 +355,6 @@
 
     function showBadge() { document.getElementById('navBadge').style.display = 'block'; }
     function hideBadge() { document.getElementById('navBadge').style.display = 'none'; }
-    
-    // ★修正ポイント: 数字のみのデータが来てもエラーにならず正常に文字変換できるようにString()でラップ
     function escapeHtml(str) { 
         if(str === null || str === undefined) return ""; 
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); 

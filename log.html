@@ -246,7 +246,7 @@
         checkDateAndLoad(); 
         setupAutoSave();
 
-        // ★ setInterval を削除し、最初の1回だけ呼び出してループさせる
+        // 最初の1回だけ呼び出してループさせる
         checkNewMessages();
     }
 
@@ -437,24 +437,28 @@
         }).catch(err => { display.textContent = "読み込み失敗"; display.style.color = "red"; });
     }
     
-    // ★ fetch完了後に再度自身を呼び出す仕組み（ポーリングの改善）
+    // ★通信渋滞を避けるため、チェック頻度を60秒に変更（log.html用）
     function checkNewMessages() {
-        // オフラインならしばらく待ってから再チェック
         if (!navigator.onLine) {
-            setTimeout(checkNewMessages, 15000);
+            setTimeout(checkNewMessages, 60000);
             return;
         }
 
-        fetch(GAS_URL + "?action=getChat").then(res => res.json()).then(data => {
+        fetch(GAS_URL + "?action=getChat")
+        .then(res => res.json())
+        .then(data => {
             if (data && data.length > 0) {
                 const latest = data.find(msg => msg.sender === "管理者");
                 const badge = document.getElementById('navBadge');
-                if (latest && latest.read === "") badge.style.display = 'block'; else badge.style.display = 'none';
+                if (badge) {
+                    if (latest && latest.read === "") badge.style.display = 'block'; 
+                    else badge.style.display = 'none';
+                }
             }
-        }).catch(e => console.error(e))
+        }).catch(e => console.error("通信エラー:", e))
         .finally(() => {
-            // ★ 通信が完了（または失敗）してから15秒後に次のチェックを行う
-            setTimeout(checkNewMessages, 15000);
+            // ★ 60秒（60000ミリ秒）ごとにチェックするよう負荷を大幅軽減
+            setTimeout(checkNewMessages, 60000);
         });
     }
 

@@ -149,7 +149,7 @@
         .modal-group-select label { flex: 1; text-align: center; padding: 8px 0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-weight: bold; color: #7f8c8d; min-width: 30px; }
         .modal-group-select input:checked + label { background: var(--accent); color: white; border-color: var(--accent); }
 
-        /* ★ オフライン警告画面のスタイル ★ */
+        /* オフライン警告画面 */
         .offline-screen {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -331,12 +331,6 @@
             </div>
         </div>
     </div>
-    
-    <div class="send-area" style="margin-top: 40px; margin-bottom: 20px;">
-        <button class="send-btn" style="background-color: #3498db; box-shadow: 0 4px 0 #2980b9;" onclick="location.href='usage.html'">
-            <i class="fas fa-book-reader"></i> 使い方ガイドを開く
-        </button>
-    </div>
 </main>
 
 <div id="editModal" class="modal-overlay">
@@ -383,22 +377,6 @@
 
 <script>
     // ==========================================
-    //  ★ オフライン監視機能 ★
-    // ==========================================
-    function updateOnlineStatus() {
-        const overlay = document.getElementById('offline-screen');
-        if (navigator.onLine) {
-            overlay.style.display = 'none'; 
-        } else {
-            overlay.style.display = 'flex'; 
-        }
-    }
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    window.addEventListener('load', updateOnlineStatus);
-
-
-    // ==========================================
     //  ★ URLの手動設定（重要）
     // ==========================================
     // ▼ ここに「新しいデプロイ」で発行されたURLを貼り付けてください ▼
@@ -418,34 +396,33 @@
         loadGroupState();
         renderMembers();
         
-        // ★ ポーリングによる通信渋滞を避けるため setInterval を削除し、自己呼び出しを開始
         checkNewMessages();
         
-        // ★ 5分ごとに自動保存タイマーをセット (300,000ms)
+        // 5分ごとに自動保存タイマーをセット
         setInterval(autoSendToGAS, 300000);
     }
 
-    // ==========================================
-    //  ★ 自動保存ロジック (バックグラウンド)
-    // ==========================================
+    function updateOnlineStatus() {
+        const overlay = document.getElementById('offline-screen');
+        if (navigator.onLine) {
+            overlay.style.display = 'none'; 
+        } else {
+            overlay.style.display = 'flex'; 
+        }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    window.addEventListener('load', updateOnlineStatus);
+
     function autoSendToGAS() {
-        // オフラインなら何もしない
         if (!navigator.onLine) return;
 
-        // 「出席」または「遅刻」の人が1人でもいるかチェック
         const hasAttendees = members.some(m => m.status === 'present' || m.status === 'late');
-        
-        // 誰も出席していない(全員absent)なら自動保存しない
-        if (!hasAttendees) {
-            console.log("出席者がいないため、自動保存をスキップしました");
-            return;
-        }
+        if (!hasAttendees) return;
 
         const activeGroups = Array.from(document.querySelectorAll('#group-toggles input:checked')).map(cb => cb.value);
         const isTargetMember = (m) => {
-            if (m.grade === "1" && m.group && !activeGroups.includes(m.group)) {
-                return false; 
-            }
+            if (m.grade === "1" && m.group && !activeGroups.includes(m.group)) return false; 
             return true;
         };
 
@@ -461,10 +438,8 @@
         formData.append('type', 'attendance');
         formData.append('text', finalText);
         
-        // UIをブロックせずにバックグラウンド送信
         fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: formData })
         .then(() => {
-            // 成功したら小さなメッセージを更新
             const now = new Date();
             const timeStr = now.getHours() + ":" + String(now.getMinutes()).padStart(2, '0');
             document.getElementById('auto-save-msg').textContent = `自動保存しました: ${timeStr}`;
@@ -555,7 +530,6 @@
             const badge = m.group ? `<span class="group-badge">${m.group}</span>` : '';
             
             let actionContent = '';
-            // ★ updateStatus に引数として this (ボタン要素自身) を渡すように変更
             if (mode === 'normal') {
                 actionContent = `
                     <button class="status-btn ${m.status==='present'?'active':''}" onclick="updateStatus(${m.id},'present', this)" data-status="present">出</button>
@@ -629,20 +603,17 @@
         }
     };
 
-    // ★ 毎回全描画せず、クリックされたボタン群の表示だけを更新するように変更
     window.updateStatus = function(id, status, btnElement) {
         const m = members.find(x => x.id === id);
         if(m) { 
             m.status = status; 
             saveData(); 
-            
-            // 全体を再描画せず、クリックしたメンバーのボタンの色だけを更新する
             if (btnElement) {
                 const parent = btnElement.parentElement;
                 parent.querySelectorAll('.status-btn').forEach(btn => btn.classList.remove('active'));
                 btnElement.classList.add('active');
             } else {
-                renderMembers(); // 念のための予備処理
+                renderMembers();
             }
         }
     };
@@ -805,11 +776,10 @@
         }).catch(err => { alert("エラー"); btn.disabled = false; });
     }
 
-    // ★ fetch完了後に再度自身を呼び出す仕組み（ポーリングの改善）
+    // ★通信渋滞を避けるため、チェック頻度を60秒に変更（attendance.html用）
     function checkNewMessages() {
-        // オフラインならしばらく待ってから再チェック
         if (!navigator.onLine) {
-            setTimeout(checkNewMessages, 15000);
+            setTimeout(checkNewMessages, 60000);
             return;
         }
 
@@ -822,17 +792,17 @@
                 const tooltip = document.getElementById('newMsgTooltip');
                 
                 if (latestAdminMsg && latestAdminMsg.read === "") {
-                    badge.style.display = 'block';
-                    tooltip.style.display = 'block';
+                    if(badge) badge.style.display = 'block';
+                    if(tooltip) tooltip.style.display = 'block';
                 } else {
-                    badge.style.display = 'none';
-                    tooltip.style.display = 'none';
+                    if(badge) badge.style.display = 'none';
+                    if(tooltip) tooltip.style.display = 'none';
                 }
             }
-        }).catch(e => console.error(e))
+        }).catch(e => console.error("通信エラー:", e))
         .finally(() => {
-            // ★ 通信が完了（または失敗）してから15秒後に次のチェックを行う
-            setTimeout(checkNewMessages, 15000);
+            // ★ 60秒（60000ミリ秒）ごとにチェックするよう負荷を大幅軽減
+            setTimeout(checkNewMessages, 60000);
         });
     }
 </script>
