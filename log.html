@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>部活動日誌</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --accent: #27ae60; --bg: #f0f2f5; --text: #333; }
+        body { font-family: sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding-bottom: 80px; }
+        header { background-color: var(--primary); position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        nav ul { display: flex; list-style: none; margin: 0; padding: 0; height: 60px; }
+        nav ul li { flex: 1; display: flex; align-items: center; justify-content: center; }
+        nav ul li a { 
+            color: #bdc3c7; text-decoration: none; font-weight: bold; 
+            width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; 
+            transition: 0.3s; position: relative; 
+        }
+        nav ul li a.active { color: white; background-color: rgba(255,255,255,0.15); border-bottom: 4px solid var(--accent); }
+
+        /* 通知バッジ */
+        .badge { display: none; position: absolute; top: 12px; right: 25%; width: 10px; height: 10px; background-color: #e74c3c; border: 2px solid var(--primary); border-radius: 50%; z-index: 20; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(231, 76, 60, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); } }
+        
+        /* メインレイアウト */
+        main { padding: 20px; max-width: 800px; margin: 0 auto; }
+        .panel { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h3 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #eee; padding-bottom: 10px; font-size: 1.1rem; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; font-size: 0.9rem; }
+        .time-group { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        
+        /* 入力フォーム */
+        input[type="text"].time-input, textarea, input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 1.1rem; box-sizing: border-box; }
+        input[type="text"].time-input { background-color: #fff; cursor: pointer; color: var(--primary); font-weight: bold; caret-color: transparent; }
+        
+        .menu-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        .menu-item { display: flex; align-items: center; background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #eee; cursor: pointer; transition: 0.2s; }
+        .menu-item:hover { background: #eef; }
+        .menu-item input { margin-right: 8px; transform: scale(1.2); }
+        .add-menu-area { display: flex; gap: 5px; margin-top: 10px; }
+        .add-menu-area input { flex-grow: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .btn-small { background: #95a5a6; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+        
+        .absence-display { background: #fff3cd; color: #856404; padding: 15px; border-radius: 6px; border: 1px solid #ffeeba; min-height: 40px; margin-bottom: 10px; white-space: pre-wrap; }
+        .btn-fetch { background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+        textarea { height: 120px; resize: vertical; }
+        
+        /* 送信エリア */
+        .send-area { text-align: center; margin-top: 30px; }
+        .send-btn { background-color: var(--accent); color: white; width: 100%; max-width: 500px; padding: 15px; font-size: 1.2rem; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 0 #1e8449; transition: background 0.3s; }
+        .send-btn:active { transform: translateY(4px); box-shadow: none; }
+        .send-btn:disabled { background-color: #ccc; box-shadow: none; cursor: not-allowed; }
+        .send-btn.submitted { background-color: #2ecc71; box-shadow: 0 4px 0 #27ae60; }
+
+        .history-btn { background-color: #95a5a6; color: white; width: 100%; max-width: 500px; padding: 12px; font-size: 1rem; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 0 #7f8c8d; }
+
+        /* ピッカー */
+        .picker-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; opacity: 0; transition: opacity 0.3s; }
+        .picker-overlay.show { display: block; opacity: 1; }
+        .picker-modal { position: fixed; bottom: -350px; left: 0; width: 100%; background: white; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.15); transition: bottom 0.3s cubic-bezier(0.1, 0.7, 0.1, 1); z-index: 2001; padding-bottom: 30px; }
+        .picker-overlay.show .picker-modal { bottom: 0; }
+        .picker-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #f0f0f0; background: #fff; border-top-left-radius: 20px; border-top-right-radius: 20px; }
+        .picker-btn { border: none; background: none; font-size: 1rem; padding: 10px; cursor: pointer; border-radius: 8px; }
+        .picker-body { display: flex; justify-content: center; align-items: center; height: 240px; position: relative; overflow: hidden; background: linear-gradient(to bottom, #ffffff 0%, rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%, #ffffff 100%); }
+        .picker-highlight { position: absolute; top: 50%; left: 15px; right: 15px; height: 50px; margin-top: -25px; background: rgba(39, 174, 96, 0.1); border-radius: 10px; pointer-events: none; border-top: 1px solid rgba(39, 174, 96, 0.3); border-bottom: 1px solid rgba(39, 174, 96, 0.3); z-index: 0; }
+        .picker-column { flex: 1; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; text-align: center; position: relative; z-index: 1; scrollbar-width: none; }
+        .picker-item { height: 50px; line-height: 50px; scroll-snap-align: center; color: #bdc3c7; font-size: 1.2rem; transition: all 0.2s ease-out; cursor: pointer; font-weight: 500; }
+        .picker-item.selected { color: #2c3e50; font-weight: bold; font-size: 1.5rem; transform: scale(1.1); }
+        .picker-spacer { height: 95px; }
+        
+        /* 履歴モーダル */
+        .history-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 3000; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s; }
+        .history-overlay.show { opacity: 1; }
+        .history-modal-content { background: #f9f9f9; width: 95%; max-width: 800px; height: 90%; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.3); overflow: hidden; }
+        .history-header { background: var(--primary); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 1.2rem; }
+        .close-hist-btn { background: none; border: none; color: white; font-size: 1.8rem; cursor: pointer; padding: 0 10px; }
+        .history-body { padding: 20px; overflow-y: auto; flex: 1; }
+        .hist-card { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-top:10px; }
+        .hist-item { margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .hist-label { font-size: 0.9rem; color: #7f8c8d; font-weight: bold; display: block; margin-bottom: 5px; }
+        .hist-text { font-size: 1.1rem; color: #2c3e50; white-space: pre-wrap; line-height: 1.6; }
+
+        /* グラフモーダル用のスタイル */
+        .chart-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 4000; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s; }
+        .chart-overlay.show { opacity: 1; }
+        .chart-modal { background: white; width: 95%; max-width: 800px; border-radius: 12px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); position: relative; display: flex; flex-direction: column; max-height: 90vh; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .chart-controls { display: flex; gap: 10px; align-items: center; }
+        .chart-close-btn { background: none; border: none; font-size: 1.5rem; color: #7f8c8d; cursor: pointer; }
+        .stats-btn { background: #e67e22; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .stats-btn:hover { background: #d35400; }
+    </style>
+</head>
+<body>
+
+<header>
+    <nav>
+        <ul>
+            <li><a href="attendance.html"><i class="fas fa-clipboard-user"></i>&nbsp;出席表</a></li>
+            <li><a href="log.html" class="active"><i class="fas fa-book"></i>&nbsp;日誌</a></li>
+            <li><a href="other.html"><i class="fas fa-comments"></i>&nbsp;連絡<span id="navBadge" class="badge"></span></a></li>
+        </ul>
+    </nav>
+</header>
+
+<main>
+    <div class="panel">
+        <h3><i class="fas fa-pen-nib"></i> 日誌記入者</h3>
+        <input type="text" id="writerName" placeholder="氏名を入力">
+    </div>
+    <div class="panel">
+        <h3><i class="fas fa-key"></i> 鍵取り・鍵返却</h3>
+        <div class="time-group">
+            <div><label>鍵を取りに行った人</label><input type="text" id="keyPickup" placeholder="名前を入力"></div>
+            <div><label>鍵を返した人</label><input type="text" id="keyReturn" placeholder="名前を入力"></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3><i class="far fa-clock"></i> 活動時間</h3>
+        <div class="time-group">
+            <div><label>開始時刻</label><input type="text" id="startTime" class="time-input" placeholder="選択" readonly onclick="openTimePicker(this)"></div>
+            <div><label>終了時刻</label><input type="text" id="endTime" class="time-input" placeholder="選択" readonly onclick="openTimePicker(this)"></div>
+        </div>
+        <div><label>自主練終了時刻 (あれば)</label><input type="text" id="freeTime" class="time-input" placeholder="選択" readonly onclick="openTimePicker(this)"></div>
+    </div>
+
+    <div class="panel">
+        <h3><i class="fas fa-user-check"></i> 今日の欠席・遅刻</h3>
+        <div id="absenceData" class="absence-display">（下のボタンを押して読み込み）</div>
+        <button class="btn-fetch" onclick="fetchAbsenceData()"><i class="fas fa-sync-alt"></i> ここを押して最新の出欠情報を自動書き込み</button>
+    </div>
+
+    <div class="panel">
+        <h3><i class="fas fa-list-ul"></i> 練習メニュー</h3>
+        <div id="menuContainer" class="menu-list"></div>
+        <div class="add-menu-area">
+            <input type="text" id="newMenuInput" placeholder="新しいメニューを追加...">
+            <button class="btn-small" onclick="addMenu()">追加</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3><i class="fas fa-bullseye"></i> 今日の的中記録</h3>
+        <div class="time-group">
+            <div>
+                <label>総射数</label>
+                <input type="number" id="totalShots" placeholder="0" oninput="calcHitRate()">
+            </div>
+            <div>
+                <label>総的中数</label>
+                <input type="number" id="totalHits" placeholder="0" oninput="calcHitRate()">
+            </div>
+        </div>
+        <div style="background:#e8f8f5; padding:15px; border-radius:6px; text-align:center; border:1px solid #d1f2eb;">
+            <label style="margin-bottom:5px; color:#16a085;">平均的中率</label>
+            <span id="hitRateDisplay" style="font-size:2rem; font-weight:bold; color:#27ae60;">0.0</span>
+            <span style="font-size:1.2rem; color:#27ae60;">%</span>
+            <input type="hidden" id="hitRateValue" value="">
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3><i class="fas fa-pen"></i> 今日の振り返り</h3>
+        <textarea id="reflection" placeholder="良かった点、反省点、連絡事項など..."></textarea>
+    </div>
+
+    <div class="send-area">
+        <button class="send-btn" onclick="sendJournal()"><i class="fas fa-paper-plane"></i> 日誌を担当顧問へ提出</button>
+        <div id="status-msg" style="margin-top:15px; font-weight:bold; color:var(--accent);"></div>
+        <button class="history-btn" onclick="openHistory()"><i class="fas fa-history"></i> 過去の日誌を見る</button>
+    </div>
+</main>
+
+<div id="timePickerOverlay" class="picker-overlay">
+    <div class="picker-modal">
+        <div class="picker-header">
+            <button class="picker-btn cancel" onclick="closeTimePicker()">キャンセル</button>
+            <span class="picker-title">時刻を選択</span>
+            <button class="picker-btn done" onclick="confirmTimePicker()">決定</button>
+        </div>
+        <div class="picker-body">
+            <div class="picker-highlight"></div>
+            <div class="picker-column" id="pickerHour"></div>
+            <div style="font-weight:bold; width:30px; text-align:center; z-index:1;">時</div>
+            <div class="picker-column" id="pickerMinute"></div>
+            <div style="font-weight:bold; width:30px; text-align:center; z-index:1;">分</div>
+        </div>
+    </div>
+</div>
+
+<div id="historyOverlay" class="history-overlay">
+    <div class="history-modal-content">
+        <div class="history-header"><span>日誌アーカイブ</span><button class="close-hist-btn" onclick="closeHistory()">×</button></div>
+        <div class="history-body">
+            <div style="text-align:center; margin-bottom:10px; display:flex; justify-content:center; align-items:center; gap:10px;">
+                <select id="historyDateSelect" onchange="renderHistoryDetail()" style="padding:10px; font-size:1rem; flex-grow:0;"></select>
+                <button class="stats-btn" onclick="openStats()"><i class="fas fa-chart-bar"></i> 推移グラフ</button>
+            </div>
+            <div id="historyDetailArea"></div>
+        </div>
+    </div>
+</div>
+
+<div id="chartOverlay" class="chart-overlay">
+    <div class="chart-modal">
+        <div class="chart-header">
+            <div class="chart-controls">
+                <h3 style="margin:0; border:none; font-size:1rem;"><i class="fas fa-chart-line"></i> 的中率推移</h3>
+                <select id="chartMonthSelect" onchange="updateChart()" style="padding:5px; font-size:1rem; border:1px solid #ddd; border-radius:4px;"></select>
+            </div>
+            <button class="chart-close-btn" onclick="closeStats()">×</button>
+        </div>
+        
+        <div style="text-align:center; margin-bottom:10px;">
+            <span style="font-weight:bold; color:#555;">月間平均: </span>
+            <span id="monthAverageDisplay" style="font-size:1.5rem; color:#e67e22; font-weight:bold;">--</span>
+            <span style="font-size:1rem;">%</span>
+        </div>
+
+        <div style="position: relative; height:300px; width:100%; flex-grow:1;">
+            <canvas id="hitRateChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    //  ★ URLの手動設定（重要）
+    // ==========================================
+    // ▼ ここに「新しいデプロイ」で発行されたURLを貼り付けてください ▼
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbztpc_juaM07bYmmO4BTqKIUDd354Xngo5dOPt0runtFXvBka1_o595HA4bMyIOLqmR/exec";
+    
+    const DRAFT_KEY = "club_journal_draft_v3"; 
+    
+    let menuItems = JSON.parse(localStorage.getItem('clubMenus')) || ["立射四矢2立", "立射四矢1立", "坐射二手", "坐射一手", "矢数", "ミーティング", "筋トレ(1年生)"];
+    let currentTargetInput = null;
+    let cachedJournalHistory = [];
+
+    init();
+
+    function init() { 
+        renderMenus();
+        initPickerData(); 
+        checkDateAndLoad(); 
+        setupAutoSave();
+
+        // ★ setInterval を削除し、最初の1回だけ呼び出してループさせる
+        checkNewMessages();
+    }
+
+    function checkDateAndLoad() {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (!saved) return; 
+
+        const draft = JSON.parse(saved);
+        const today = new Date().toLocaleDateString('ja-JP'); 
+
+        if (draft.saveDate && draft.saveDate !== today) {
+            console.log("日付変更を検知: フォームをリセットします");
+            localStorage.removeItem(DRAFT_KEY);
+            return;
+        }
+
+        restoreFormData(draft);
+    }
+
+    function restoreFormData(draft) {
+        if (draft.writerName) document.getElementById('writerName').value = draft.writerName;
+        if (draft.keyPickup) document.getElementById('keyPickup').value = draft.keyPickup;
+        if (draft.keyReturn) document.getElementById('keyReturn').value = draft.keyReturn;
+        if (draft.startTime) document.getElementById('startTime').value = draft.startTime;
+        if (draft.endTime) document.getElementById('endTime').value = draft.endTime;
+        if (draft.freeTime) document.getElementById('freeTime').value = draft.freeTime;
+        if (draft.reflection) document.getElementById('reflection').value = draft.reflection;
+        
+        if (draft.absenceData && draft.absenceData !== "（下のボタンを押して読み込み）") {
+            const display = document.getElementById('absenceData');
+            display.textContent = draft.absenceData;
+            display.style.color = "#333";
+        }
+
+        if (draft.totalShots) document.getElementById('totalShots').value = draft.totalShots;
+        if (draft.totalHits) document.getElementById('totalHits').value = draft.totalHits;
+        calcHitRate(); 
+
+        if (draft.checkedMenus && Array.isArray(draft.checkedMenus)) {
+            draft.checkedMenus.forEach(val => {
+                const cb = document.querySelector(`input[name="menu"][value="${val}"]`);
+                if (cb) cb.checked = true;
+            });
+        }
+
+        const today = new Date().toLocaleDateString('ja-JP');
+        if (draft.lastSubmitted === today) {
+            markAsSubmitted();
+        }
+    }
+
+    function saveDraft() {
+        const previous = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+        const today = new Date().toLocaleDateString('ja-JP');
+
+        const draftData = {
+            saveDate: today,
+            lastSubmitted: previous.lastSubmitted === today ? today : null,
+            
+            writerName: document.getElementById('writerName').value,
+            keyPickup: document.getElementById('keyPickup').value,
+            keyReturn: document.getElementById('keyReturn').value,
+            startTime: document.getElementById('startTime').value,
+            endTime: document.getElementById('endTime').value,
+            freeTime: document.getElementById('freeTime').value,
+            reflection: document.getElementById('reflection').value,
+            totalShots: document.getElementById('totalShots').value,
+            totalHits: document.getElementById('totalHits').value,
+            absenceData: document.getElementById('absenceData').textContent,
+            checkedMenus: Array.from(document.querySelectorAll('input[name="menu"]:checked')).map(cb => cb.value)
+        };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+    }
+
+    function calcHitRate() {
+        const shots = parseFloat(document.getElementById('totalShots').value) || 0;
+        const hits = parseFloat(document.getElementById('totalHits').value) || 0;
+        const display = document.getElementById('hitRateDisplay');
+        const hiddenInput = document.getElementById('hitRateValue');
+
+        if (shots > 0) {
+            const rate = ((hits / shots) * 100).toFixed(1);
+            display.textContent = rate;
+            hiddenInput.value = rate + "%";
+        } else {
+            display.textContent = "0.0";
+            hiddenInput.value = "";
+        }
+        saveDraft(); 
+    }
+
+    function setupAutoSave() {
+        document.querySelectorAll('input, textarea').forEach(el => el.addEventListener('input', saveDraft));
+        document.getElementById('menuContainer').addEventListener('change', saveDraft);
+    }
+
+    function sendJournal() {
+        const writer = document.getElementById('writerName').value;
+        const keyP = document.getElementById('keyPickup').value;
+        const keyR = document.getElementById('keyReturn').value;
+        const start = document.getElementById('startTime').value;
+        const end = document.getElementById('endTime').value;
+        const free = document.getElementById('freeTime').value;
+        const checkedMenus = Array.from(document.querySelectorAll('input[name="menu"]:checked')).map(cb => cb.value);
+        const reflection = document.getElementById('reflection').value;
+        const absenceInfo = document.getElementById('absenceData').textContent;
+        const shots = document.getElementById('totalShots').value;
+        const hits = document.getElementById('totalHits').value;
+        const rate = document.getElementById('hitRateValue').value;
+
+        if(!writer) { alert("記入者の名前を入力してください"); return; }
+        if(!start || !end) { alert("開始・終了時刻を入力してください"); return; }
+
+        let message = `【部活動日誌】\n`;
+        message += `■記入者: ${writer}\n`;
+        if (keyP || keyR) { message += `■鍵当番: 借り[${keyP || "未記入"}] / 返却[${keyR || "未記入"}]\n`; }
+        message += `■時間: ${start} ～ ${end}`;
+        if(free) message += ` (自主練 ～${free})`;
+        message += `\n■メニュー: ${checkedMenus.length > 0 ? checkedMenus.join("、") : "なし"}\n`;
+        
+        if(shots && hits) {
+             message += `■的中: ${shots}射 ${hits}中 (${rate || "0.0%"})\n`;
+        }
+        
+        message += `■欠席・遅刻: ${absenceInfo}\n`;
+        message += `■振り返り:\n${reflection}`;
+
+        const btn = document.querySelector('.send-btn');
+        const msg = document.getElementById('status-msg');
+        btn.disabled = true; btn.textContent = "送信中...";
+
+        const formData = new FormData();
+        formData.append('type', 'log'); 
+        formData.append('text', message);
+        formData.append('rate', rate);
+
+        fetch(GAS_URL, { method: 'POST', body: formData })
+        .then(() => {
+            msg.textContent = "提出しました！内容はそのまま残っています。修正して再度提出も可能です。";
+            
+            const today = new Date().toLocaleDateString('ja-JP');
+            const currentDraft = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+            currentDraft.lastSubmitted = today;
+            currentDraft.saveDate = today;
+            currentDraft.absenceData = document.getElementById('absenceData').textContent;
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(currentDraft));
+            
+            markAsSubmitted();
+
+            setTimeout(() => { msg.textContent = ""; }, 5000);
+        })
+        .catch(err => { 
+            alert("送信エラー: " + err); 
+            btn.disabled = false; 
+            btn.textContent = "再送信"; 
+        });
+    }
+
+    function markAsSubmitted() {
+        const btn = document.querySelector('.send-btn');
+        btn.disabled = false;
+        btn.textContent = "本日分日誌提出済み(編集可能)";
+        btn.classList.add('submitted');
+    }
+
+    function renderMenus() {
+        const container = document.getElementById('menuContainer'); container.innerHTML = '';
+        menuItems.forEach((item, index) => {
+            const label = document.createElement('label'); label.className = 'menu-item';
+            label.innerHTML = `<input type="checkbox" name="menu" value="${item}">${item} <span onclick="deleteMenu(${index})" style="margin-left:auto; color:#ccc; font-size:0.8rem; padding:5px;">×</span>`;
+            container.appendChild(label);
+        });
+    }
+    function addMenu() {
+        const input = document.getElementById('newMenuInput'); const val = input.value.trim();
+        if(val) { menuItems.push(val); localStorage.setItem('clubMenus', JSON.stringify(menuItems)); input.value = ''; renderMenus(); }
+    }
+    window.deleteMenu = function(index) {
+        if(confirm("削除しますか？")) { menuItems.splice(index, 1); localStorage.setItem('clubMenus', JSON.stringify(menuItems)); renderMenus(); saveDraft(); } event.preventDefault(); 
+    }
+    
+    function fetchAbsenceData() {
+        const display = document.getElementById('absenceData'); display.textContent = "読み込み中..."; display.style.color = "#856404";
+        fetch(`${GAS_URL}?action=getTodayAbsence`).then(res => res.text()).then(text => { 
+            display.textContent = text; 
+            display.style.color = "#333"; 
+            saveDraft(); 
+        }).catch(err => { display.textContent = "読み込み失敗"; display.style.color = "red"; });
+    }
+    
+    // ★ fetch完了後に再度自身を呼び出す仕組み（ポーリングの改善）
+    function checkNewMessages() {
+        // オフラインならしばらく待ってから再チェック
+        if (!navigator.onLine) {
+            setTimeout(checkNewMessages, 15000);
+            return;
+        }
+
+        fetch(GAS_URL + "?action=getChat").then(res => res.json()).then(data => {
+            if (data && data.length > 0) {
+                const latest = data.find(msg => msg.sender === "管理者");
+                const badge = document.getElementById('navBadge');
+                if (latest && latest.read === "") badge.style.display = 'block'; else badge.style.display = 'none';
+            }
+        }).catch(e => console.error(e))
+        .finally(() => {
+            // ★ 通信が完了（または失敗）してから15秒後に次のチェックを行う
+            setTimeout(checkNewMessages, 15000);
+        });
+    }
+
+    // ピッカー
+    const ITEM_HEIGHT = 50; const SPACER_HEIGHT = 95; 
+    function initPickerData() {
+        const hourCol = document.getElementById('pickerHour'); const minCol = document.getElementById('pickerMinute');
+        const spacer = `<div class="picker-spacer"></div>`;
+        let hourHtml = spacer; for(let i=0; i<24; i++) { hourHtml += `<div class="picker-item" data-val="${i}" onclick="scrollToItem(this)">${i}</div>`; } hourHtml += spacer; hourCol.innerHTML = hourHtml;
+        let minHtml = spacer; for(let i=0; i<60; i++) { const val = i.toString().padStart(2, '0'); minHtml += `<div class="picker-item" data-val="${val}" onclick="scrollToItem(this)">${val}</div>`; } minHtml += spacer; minCol.innerHTML = minHtml;
+        [hourCol, minCol].forEach(col => { col.addEventListener('scroll', () => { window.requestAnimationFrame(() => highlightSelection(col)); }); });
+    }
+    window.scrollToItem = function(element) { const container = element.parentElement; const targetVal = element.getAttribute('data-val'); const targetEl = Array.from(container.querySelectorAll('.picker-item')).find(el => el.getAttribute('data-val') === targetVal); if(targetEl) { container.scrollTo({ top: targetEl.offsetTop - SPACER_HEIGHT, behavior: 'smooth' }); } };
+    function highlightSelection(container) { const items = container.querySelectorAll('.picker-item'); const containerRect = container.getBoundingClientRect(); const center = containerRect.top + containerRect.height / 2; items.forEach(item => { const rect = item.getBoundingClientRect(); const diff = Math.abs(center - (rect.top + rect.height / 2)); if(diff < ITEM_HEIGHT / 2) item.classList.add('selected'); else item.classList.remove('selected'); }); }
+    function openTimePicker(inputElement) { currentTargetInput = inputElement; const overlay = document.getElementById('timePickerOverlay'); overlay.style.display = 'block'; setTimeout(() => overlay.classList.add('show'), 10); let defaultHour = new Date().getHours(); let defaultMin = new Date().getMinutes(); if (inputElement.value) { const match = inputElement.value.match(/(\d+)時(\d+)分/); if (match) { defaultHour = parseInt(match[1]); defaultMin = parseInt(match[2]); } } setTimeout(() => { snapToValue('pickerHour', defaultHour); snapToValue('pickerMinute', defaultMin.toString().padStart(2, '0')); }, 50); }
+    function snapToValue(colId, val) { const container = document.getElementById(colId); const target = Array.from(container.querySelectorAll('.picker-item')).find(el => el.getAttribute('data-val') == val); if(target) { container.scrollTop = target.offsetTop - SPACER_HEIGHT; highlightSelection(container); } }
+    function closeTimePicker() { const overlay = document.getElementById('timePickerOverlay'); overlay.classList.remove('show'); setTimeout(() => { overlay.style.display = 'none'; }, 300); }
+    function confirmTimePicker() { if (!currentTargetInput) return; const h = getSelectedValue('pickerHour'); const m = getSelectedValue('pickerMinute'); currentTargetInput.value = `${h}時${m}分`; saveDraft(); closeTimePicker(); }
+    function getSelectedValue(colId) { const container = document.getElementById(colId); const selected = container.querySelector('.picker-item.selected'); if (selected) return selected.getAttribute('data-val'); const index = Math.round(container.scrollTop / ITEM_HEIGHT); const items = container.querySelectorAll('.picker-item'); if (items[index]) return items[index].getAttribute('data-val'); return "00"; }
+    
+    // 履歴
+    function openHistory() { document.getElementById('historyOverlay').style.display = 'flex'; setTimeout(() => document.getElementById('historyOverlay').classList.add('show'), 10); fetchHistoryData(); }
+    function closeHistory() { document.getElementById('historyOverlay').classList.remove('show'); setTimeout(() => document.getElementById('historyOverlay').style.display = 'none', 300); }
+    function fetchHistoryData() { const d = document.getElementById('historyDetailArea'); d.innerHTML = '<p style="text-align:center;">読み込み中...</p>'; fetch(GAS_URL + "?action=getJournal").then(r=>r.json()).then(data=>{ cachedJournalHistory=data; initHistorySelect(data); }).catch(e=>console.error(e)); }
+    function initHistorySelect(data) { const sel = document.getElementById('historyDateSelect'); sel.innerHTML = ""; if(!data || !data.length){ sel.innerHTML = "<option>データなし</option>"; return; } data.forEach((item,i)=>{ const op = document.createElement('option'); const d = new Date(item.rawDate); op.value = i; op.textContent = `${d.getMonth()+1}/${d.getDate()} (${["日","月","火","水","木","金","土"][d.getDay()]})`; sel.appendChild(op); }); sel.selectedIndex=0; renderHistoryDetail(); }
+    
+    function renderHistoryDetail() { 
+        const idx = document.getElementById('historyDateSelect').value; 
+        const item = cachedJournalHistory[idx]; 
+        if(!item) return; 
+        const p = item.parsed; 
+        document.getElementById('historyDetailArea').innerHTML = `
+            <div class="hist-card">
+                <div class="hist-item"><span class="hist-label">記入者</span><div class="hist-text">${p.writer}</div></div>
+                <div class="hist-item"><span class="hist-label">時間</span><div class="hist-text">${p.time}</div></div>
+                <div class="hist-item"><span class="hist-label">メニュー</span><div class="hist-text">${p.menu}</div></div>
+                <div class="hist-item"><span class="hist-label">的中</span><div class="hist-text">${p.hitInfo || "記載なし"}</div></div>
+                <div class="hist-item"><span class="hist-label">振り返り</span><div class="hist-text">${p.reflection}</div></div>
+                <div class="hist-item" style="background:#fffcf5; padding:10px;">
+                    <span class="hist-label" style="color:#d35400;">先生コメント</span>
+                    <div class="hist-text" style="color:#d35400;">${p.teacherComment || "なし"}</div>
+                </div>
+                <div class="hist-item">
+                    <span class="hist-label">休み・欠席</span>
+                    <div class="hist-text">${p.absentInfo || "なし"}</div>
+                </div>
+            </div>
+        `; 
+    }
+
+    // ▼ グラフ描画関連のスクリプト
+    let allHitData = [];
+    let myChart = null;
+
+    function openStats() {
+        const overlay = document.getElementById('chartOverlay');
+        overlay.style.display = 'flex';
+        setTimeout(() => overlay.classList.add('show'), 10);
+        
+        fetchHitStats();
+    }
+
+    function closeStats() {
+        const overlay = document.getElementById('chartOverlay');
+        overlay.classList.remove('show');
+        setTimeout(() => overlay.style.display = 'none', 300);
+    }
+
+    function fetchHitStats() {
+        fetch(GAS_URL + "?action=getHitStats")
+            .then(res => res.json())
+            .then(data => {
+                allHitData = data;
+                initChartMonthSelect(data);
+            })
+            .catch(err => alert("データ取得エラー: " + err));
+    }
+
+    function initChartMonthSelect(data) {
+        const select = document.getElementById('chartMonthSelect');
+        select.innerHTML = "";
+        
+        if (!data || data.length === 0) {
+            const op = document.createElement('option');
+            op.text = "データなし";
+            select.appendChild(op);
+            return;
+        }
+
+        const months = new Set();
+        data.forEach(item => {
+            const d = new Date(item.date);
+            if (!isNaN(d)) {
+                const key = d.getFullYear() + "/" + (d.getMonth() + 1).toString().padStart(2, '0');
+                months.add(key);
+            }
+        });
+
+        const sortedMonths = Array.from(months).sort().reverse();
+        sortedMonths.forEach(m => {
+            const op = document.createElement('option');
+            op.value = m;
+            op.text = m + "月";
+            select.appendChild(op);
+        });
+
+        if (sortedMonths.length > 0) {
+            select.selectedIndex = 0;
+            updateChart();
+        }
+    }
+
+    function updateChart() {
+        const selectedMonth = document.getElementById('chartMonthSelect').value;
+        if (!selectedMonth || !allHitData.length) return;
+
+        const filteredData = allHitData.filter(item => {
+            const d = new Date(item.date);
+            const key = d.getFullYear() + "/" + (d.getMonth() + 1).toString().padStart(2, '0');
+            return key === selectedMonth;
+        });
+
+        filteredData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        const labels = filteredData.map(item => {
+            const d = new Date(item.date);
+            return d.getDate() + "日";
+        });
+        const dataPoints = filteredData.map(item => item.rate);
+
+        const sum = dataPoints.reduce((a, b) => a + b, 0);
+        const avg = dataPoints.length > 0 ? (sum / dataPoints.length).toFixed(1) : "0.0";
+        document.getElementById('monthAverageDisplay').textContent = avg;
+
+        const ctx = document.getElementById('hitRateChart').getContext('2d');
+        
+        if (myChart) {
+            myChart.destroy();
+        }
+
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '的中率 (%)',
+                    data: dataPoints,
+                    backgroundColor: 'rgba(39, 174, 96, 0.6)',
+                    borderColor: 'rgba(39, 174, 96, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: { display: true, text: '的中率(%)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.raw + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>連絡チャット</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #e74c3c;
+            --bg: #7494c0;
+            --my-msg-bg: #8de055;
+            --other-msg-bg: #ffffff;
+            --text: #333;
+            --line-input-bg: #f3f3f3;
+            --line-send-color: #007aff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex; flex-direction: column; height: 100vh;
+        }
+
+        /* ヘッダー */
+        header { background-color: var(--primary); flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10; }
+        nav ul { display: flex; list-style: none; margin: 0; padding: 0; height: 60px; }
+        nav ul li { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        nav ul li a {
+            color: #bdc3c7; text-decoration: none; font-weight: bold;
+            width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+            transition: 0.3s; position: relative; 
+        }
+        nav ul li a.active { color: white; background-color: rgba(255,255,255,0.15); border-bottom: 4px solid var(--accent); }
+
+        /* バッジ */
+        .badge {
+            display: none; position: absolute; top: 12px; right: 30%;
+            width: 10px; height: 10px; background-color: #e74c3c;
+            border: 2px solid var(--primary); border-radius: 50%; z-index: 20;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(231, 76, 60, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        /* チャットエリア */
+        main { flex-grow: 1; padding: 20px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; }
+
+        .date-divider { text-align: center; margin: 15px 0; position: relative; }
+        .date-badge { background-color: rgba(0,0,0,0.15); color: #fff; font-size: 0.7rem; padding: 4px 12px; border-radius: 50px; display: inline-block; text-shadow: 0 1px 1px rgba(0,0,0,0.2); }
+
+        /* 未読メッセージ区切り線 */
+        .unread-divider {
+            text-align: center; margin: 20px 0; color: #fff; font-size: 0.8rem;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .unread-divider::before, .unread-divider::after {
+            content: ""; height: 1px; background: rgba(255,255,255,0.5); flex-grow: 1;
+        }
+        .unread-badge { background: #e74c3c; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+
+        .message-row { display: flex; width: 100%; margin-bottom: 5px; }
+        .message-row.me { justify-content: flex-end; align-items: flex-end; }
+        .message-row.me .bubble { background-color: var(--my-msg-bg); border-radius: 18px 0 18px 18px; margin-left: 5px; }
+        .message-row.me .bubble::after { content: ""; position: absolute; top: 0; right: -8px; border-top: 10px solid var(--my-msg-bg); border-left: 10px solid transparent; border-right: 10px solid transparent; transform: rotate(-35deg); }
+
+        .message-row.teacher { justify-content: flex-start; align-items: flex-start; }
+        .teacher-container { display: flex; flex-direction: column; max-width: 80%; align-items: flex-start; }
+        .sender-name { font-size: 0.75rem; color: #f0f0f0; margin-bottom: 4px; margin-left: 5px; text-shadow: 0 1px 1px rgba(0,0,0,0.2); }
+        .message-content-wrapper { display: flex; align-items: flex-end; }
+        .message-row.teacher .bubble { background-color: var(--other-msg-bg); border-radius: 0 18px 18px 18px; margin-right: 5px; }
+        .message-row.teacher .bubble::before { content: ""; position: absolute; top: 0; left: -8px; border-top: 10px solid var(--other-msg-bg); border-left: 10px solid transparent; border-right: 10px solid transparent; transform: rotate(35deg); }
+
+        .bubble { max-width: 70%; width: fit-content; padding: 9px 13px; font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; z-index: 1; color: #000; }
+        .icon-area { width: 38px; height: 38px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 8px; flex-shrink: 0; color: #555; border: 1px solid #ddd; }
+
+        .meta-info { display: flex; flex-direction: column; justify-content: flex-end; font-size: 0.65rem; color: #fff; min-width: fit-content; margin-bottom: 2px; text-shadow: 0 1px 1px rgba(0,0,0,0.2); white-space: nowrap; }
+        .me .meta-info { align-items: flex-end; margin-right: 6px; text-align: right; }
+        .teacher .meta-info { align-items: flex-start; margin-left: 6px; }
+        .read-status { color: #fff; font-weight: bold; font-size: 0.6rem; margin-bottom: 2px; }
+
+        .input-area { background: var(--line-input-bg); padding: 8px 10px; flex-shrink: 0; border-top: 1px solid #ddd; display: flex; align-items: flex-end; gap: 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+        .btn-plus { width: 34px; height: 34px; color: #999; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; margin-bottom: 3px; }
+        textarea { flex-grow: 1; height: 36px; max-height: 100px; border: none; border-radius: 18px; padding: 8px 15px; font-size: 1rem; resize: none; font-family: inherit; background: #fff; }
+        textarea:focus { outline: none; }
+        .btn-send { width: 40px; height: 40px; border: none; background: transparent; color: var(--line-send-color); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; margin-bottom: 0px; transition: 0.2s; }
+        .btn-send:active { opacity: 0.6; transform: scale(0.95); }
+        .btn-send:disabled { color: #ccc; }
+
+        .refresh-float { position: fixed; top: 70px; right: 15px; z-index: 100; background: rgba(255,255,255,0.9); border: 1px solid #ccc; border-radius: 20px; padding: 5px 12px; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1); color: var(--primary); }
+        .settings-float { position: fixed; top: 70px; right: 90px; z-index: 100; background: rgba(255,255,255,0.9); border: 1px solid #ccc; border-radius: 20px; padding: 5px 12px; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1); color: #555; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 2000; align-items: center; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-content { background: white; width: 90%; max-width: 320px; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .modal-title { font-size: 1.1rem; font-weight: bold; margin-bottom: 20px; color: #333; }
+        .modal-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
+        .btn-danger { background-color: #ffebee; color: #e74c3c; font-weight: bold; }
+        .btn-close { background-color: #f0f2f5; color: #333; }
+
+        /* 送信取り消し済みメッセージ用スタイル */
+        .bubble.unsent {
+            background-color: #f0f0f0;
+            color: #888;
+            font-size: 0.8rem;
+            font-style: italic;
+            border: 1px dashed #ccc;
+            cursor: default;
+        }
+        /* 自分のメッセージをクリック可能に見せる */
+        .message-row.me .bubble:not(.unsent) {
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .message-row.me .bubble:not(.unsent):active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <nav>
+        <ul>
+            <li><a href="attendance.html"><i class="fas fa-clipboard-user"></i>&nbsp;出席表</a></li>
+            <li><a href="log.html"><i class="fas fa-book"></i>&nbsp;日誌</a></li>
+            <li>
+                <a href="other.html" class="active" onclick="hideBadge()">
+                    <i class="fas fa-comments"></i>&nbsp;連絡
+                    <span id="navBadge" class="badge"></span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+<button class="settings-float" onclick="openSettings()"> <i class="fas fa-cog"></i> 設定 </button>
+<button class="refresh-float" onclick="loadChat()"> <i class="fas fa-sync-alt"></i> 更新 </button>
+
+<main id="chatMain" onclick="hideBadge()">
+    <div style="text-align:center; color:#fff; margin-top:50px; text-shadow:0 1px 2px rgba(0,0,0,0.2);" id="loading-msg"> <i class="fas fa-spinner fa-spin"></i> 読み込み中... </div>
+</main>
+
+<div class="input-area" onclick="hideBadge()">
+    <div class="btn-plus"><i class="fas fa-plus"></i></div>
+    <textarea id="msgInput" placeholder="メッセージを入力"></textarea>
+    <button class="btn-send" onclick="sendMessage()" id="sendBtn"> <i class="fas fa-paper-plane"></i> </button>
+</div>
+
+<div id="settingsModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-title">チャット設定</div>
+        <button class="modal-btn btn-danger" onclick="executeReset()"> <i class="fas fa-trash-alt"></i> トーク履歴を全削除 </button>
+        <button class="modal-btn btn-close" onclick="closeSettings()"> 閉じる </button>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    //  ★ URLの手動設定（重要）
+    // ==========================================
+    // ▼ ここに「新しいデプロイ」で発行されたURLを貼り付けてください ▼
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbztpc_juaM07bYmmO4BTqKIUDd354Xngo5dOPt0runtFXvBka1_o595HA4bMyIOLqmR/exec";
+
+    const chatMain = document.getElementById('chatMain');
+    let isSending = false;
+    let isFirstLoad = true;
+    let lastMessageCount = 0;
+
+    window.onload = function() {
+        loadChat();
+        setInterval(loadChat, 5000);
+    };
+
+    function loadChat() {
+        const fetchUrl = `${GAS_URL}?action=getChat&t=${new Date().getTime()}`;
+
+        fetch(fetchUrl)
+            .then(response => response.json())
+            .then(data => {
+                renderMessages(data);
+                fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: new URLSearchParams({ type: 'markRead', sender: '部員' }) });
+            })
+            .catch(err => { console.error(err); });
+    }
+
+    function renderMessages(data) {
+        const currentScrollTop = chatMain.scrollTop;
+        const scrollHeight = chatMain.scrollHeight;
+        const clientHeight = chatMain.clientHeight;
+        const isAtBottom = (scrollHeight - currentScrollTop - clientHeight) < 50;
+
+        if (!isFirstLoad && data.length > lastMessageCount) {
+            const lastMsg = data[data.length - 1];
+            if (lastMsg.sender !== '部員') showBadge();
+        }
+        lastMessageCount = data.length;
+
+        chatMain.innerHTML = ''; 
+        if(data.length === 0) { chatMain.innerHTML = '<div style="text-align:center; color:#fff; margin-top:20px; text-shadow:0 1px 2px rgba(0,0,0,0.2);">メッセージはまだありません</div>'; return; }
+
+        data.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+        const lastReadTime = localStorage.getItem('lastReadTime') || 0;
+        let unreadInserted = false;
+        let lastDateStr = "";
+
+        data.forEach(msg => {
+            const msgTime = new Date(msg.time).getTime();
+            
+            if (!unreadInserted && msgTime > lastReadTime && msg.sender !== '部員') {
+                const divider = document.createElement('div');
+                divider.className = 'unread-divider';
+                divider.innerHTML = '<span class="unread-badge">ここから未読メッセージ</span>';
+                chatMain.appendChild(divider);
+                unreadInserted = true;
+            }
+
+            const dateObj = new Date(msg.time);
+            const dateStr = dateObj.toLocaleDateString('ja-JP'); 
+            if (dateStr !== lastDateStr) {
+                const displayDate = dateObj.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+                const dateDiv = document.createElement('div');
+                dateDiv.className = 'date-divider';
+                dateDiv.innerHTML = `<span class="date-badge">${displayDate}</span>`;
+                chatMain.appendChild(dateDiv);
+                lastDateStr = dateStr;
+            }
+            appendMessageToDom(msg);
+        });
+
+        localStorage.setItem('lastReadTime', new Date().getTime());
+
+        setTimeout(() => {
+            if (isFirstLoad || isAtBottom) chatMain.scrollTop = chatMain.scrollHeight;
+            else chatMain.scrollTop = currentScrollTop;
+            isFirstLoad = false;
+        }, 50);
+    }
+
+    function appendMessageToDom(msg) {
+        let timeStr = "";
+        if(msg.time) { const d = new Date(msg.time); timeStr = `${d.getHours()}:${d.getMinutes().toString().padStart(2,'0')}`; }
+        
+        const isMe = (msg.sender === "部員");
+
+        // ★修正ポイント: msg.message ではなく msg.text として読み取るよう修正
+        const messageText = msg.text || "";
+        const isDeleted = (messageText === "__DELETED__");
+        
+        const row = document.createElement('div');
+        row.className = `message-row ${isMe ? 'me' : 'teacher'}`;
+        
+        const readHtml = (isMe && msg.read === "既読" && !isDeleted) ? `<div class="read-status">既読</div>` : ``;
+
+        // ★修正ポイント: 安全にエスケープ処理を行う
+        let displayMsg = escapeHtml(messageText);
+        let bubbleClass = "bubble";
+        let clickAttr = "";
+
+        if (isDeleted) {
+            displayMsg = "メッセージの送信を取り消しました";
+            bubbleClass += " unsent";
+        } else if (isMe) {
+            clickAttr = `onclick="confirmUnsend('${msg.time}')"`;
+        }
+
+        if(isMe) {
+            row.innerHTML = `
+            <div class="meta-info">
+                ${readHtml}
+                <span class="time">${timeStr}</span>
+            </div>
+            <div class="${bubbleClass}" ${clickAttr}>${displayMsg}</div>
+            `;
+        } else {
+            row.innerHTML = `
+            <div class="icon-area"><i class="fas fa-user-tie"></i></div>
+            <div class="teacher-container">
+                <div class="sender-name">${msg.sender}</div>
+                <div class="message-content-wrapper">
+                    <div class="${bubbleClass}">${displayMsg}</div>
+                    <div class="meta-info"><span class="time">${timeStr}</span></div>
+                </div>
+            </div>
+            `;
+        }
+        chatMain.appendChild(row);
+    }
+
+    function sendMessage() {
+        if(isSending) return;
+        const input = document.getElementById('msgInput');
+        const text = input.value.trim();
+        if(!text) return;
+        hideBadge();
+
+        const now = new Date();
+        // ★修正ポイント: text プロパティとして格納するよう統一
+        const tempMsg = { sender: "部員", text: text, time: now.toISOString(), read: "" };
+        appendMessageToDom(tempMsg);
+        chatMain.scrollTop = chatMain.scrollHeight;
+        input.value = ''; input.focus();
+
+        isSending = true;
+        const formData = new FormData();
+        formData.append('type', 'chat'); formData.append('sender', '部員'); formData.append('text', text);
+        fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: formData })
+        .then(() => { setTimeout(loadChat, 1000); })
+        .catch(err => { alert("送信に失敗しました"); })
+        .finally(() => { isSending = false; });
+    }
+
+    function confirmUnsend(timeStr) {
+        if (confirm("このメッセージの送信を取り消しますか？\n（相手の画面からも消えます）")) {
+            const formData = new FormData();
+            formData.append('type', 'unsend');
+            formData.append('sender', '部員');
+            formData.append('targetTime', timeStr);
+
+            fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: formData })
+            .then(() => {
+                setTimeout(loadChat, 1000); 
+            })
+            .catch(err => {
+                alert("取り消しに失敗しました");
+                console.error(err);
+            });
+        }
+    }
+
+    function openSettings() { document.getElementById('settingsModal').classList.add('active'); }
+    function closeSettings() { document.getElementById('settingsModal').classList.remove('active'); }
+    function executeReset() {
+        if(confirm("本当にトーク履歴を削除しますか？\nこの操作は取り消せません。")) {
+            const formData = new FormData();
+            formData.append('type', 'resetChat');
+            fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: formData })
+            .then(() => { alert("チャット履歴を削除しました。"); closeSettings(); loadChat(); });
+        }
+    }
+
+    function showBadge() { document.getElementById('navBadge').style.display = 'block'; }
+    function hideBadge() { document.getElementById('navBadge').style.display = 'none'; }
+    
+    // ★修正ポイント: 数字のみのデータが来てもエラーにならず正常に文字変換できるようにString()でラップ
+    function escapeHtml(str) { 
+        if(str === null || str === undefined) return ""; 
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); 
+    }
+</script>
+
+</body>
+</html>
